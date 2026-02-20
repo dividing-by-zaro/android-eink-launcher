@@ -1,6 +1,5 @@
 package com.palma.launcher.ui
 
-import android.appwidget.AppWidgetHostView
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.background
@@ -14,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.palma.launcher.data.AppEntry
+import com.palma.launcher.data.RecentBook
 import com.palma.launcher.data.WeatherData
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -21,10 +21,11 @@ import com.palma.launcher.data.WeatherData
 fun HomeScreen(
     apps: List<AppEntry>,
     weatherData: WeatherData? = null,
-    widgetView: AppWidgetHostView? = null,
+    recentBooks: List<RecentBook> = emptyList(),
     onAppClick: (AppEntry) -> Unit,
     onContextMenuAction: (AppEntry, ContextMenuAction) -> Unit = { _, _ -> },
-    onWidgetConfigureClick: () -> Unit = {},
+    onAllBooksClick: () -> Unit = {},
+    onBookClick: (RecentBook) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     CompositionLocalProvider(
@@ -42,10 +43,11 @@ fun HomeScreen(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
 
-            // Zone 2: Widget (pinned, full width)
-            WidgetSection(
-                widgetView = widgetView,
-                onConfigureClick = onWidgetConfigureClick,
+            // Zone 2: Library (pinned, full width)
+            LibrarySection(
+                recentBooks = recentBooks,
+                onAllBooksClick = onAllBooksClick,
+                onBookClick = onBookClick,
             )
 
             // Zone 3: App list (scrollable)

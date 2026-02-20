@@ -1,12 +1,12 @@
 package com.palma.launcher
 
 import android.Manifest
-import android.appwidget.AppWidgetHostView
-import android.appwidget.AppWidgetManager
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager as PM
 import android.net.Uri
+import androidx.core.content.FileProvider
 import android.os.Bundle
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -15,13 +15,15 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
 import com.palma.launcher.data.AppEntry
+import com.palma.launcher.data.BookRepository
+import com.palma.launcher.data.CoverExtractor
 import com.palma.launcher.data.PreferencesManager
+import com.palma.launcher.data.RecentBook
 import com.palma.launcher.data.WeatherData
 import com.palma.launcher.data.WeatherRepository
 import com.palma.launcher.ui.ContextMenuAction
@@ -30,8 +32,10 @@ import com.palma.launcher.ui.HiddenAppsDialog
 import com.palma.launcher.ui.HomeScreen
 import com.palma.launcher.ui.RenameDialog
 import com.palma.launcher.ui.theme.PalmaLauncherTheme
-import com.palma.launcher.widget.WidgetHostManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class LauncherActivity : ComponentActivity() {
 
@@ -41,12 +45,9 @@ class LauncherActivity : ComponentActivity() {
     lateinit var weatherRepository: WeatherRepository
         private set
 
-    lateinit var widgetHostManager: WidgetHostManager
-        private set
-
     val apps = mutableStateListOf<AppEntry>()
     val weatherState = mutableStateOf<WeatherData?>(null)
-    val widgetViewState = mutableStateOf<AppWidgetHostView?>(null)
+    val recentBooksState = mutableStateOf<List<RecentBook>>(emptyList())
 
     // Dialog state
     private val showRenameDialog = mutableStateOf(false)
@@ -54,16 +55,17 @@ class LauncherActivity : ComponentActivity() {
     private val showHiddenAppsDialog = mutableStateOf(false)
     private val hiddenAppsList = mutableStateListOf<HiddenAppInfo>()
 
-    private var pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { _ ->
         refreshWeather()
     }
 
-    private lateinit var widgetPickerLauncher: ActivityResultLauncher<Intent>
-    private lateinit var widgetConfigureLauncher: ActivityResultLauncher<Intent>
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) refreshRecentBooks()
+    }
 
     companion object {
         private val DEFAULT_HIDDEN_PACKAGES = setOf(
@@ -81,7 +83,6 @@ class LauncherActivity : ComponentActivity() {
 
         prefsManager = PreferencesManager(this)
         weatherRepository = WeatherRepository(this, prefsManager)
-        widgetHostManager = WidgetHostManager(this, prefsManager)
 
         // First-run: set default hidden apps
         if (prefsManager.isFirstRun()) {
@@ -93,43 +94,9 @@ class LauncherActivity : ComponentActivity() {
         // Load cached weather immediately
         weatherState.value = weatherRepository.getCachedWeather()
 
-        // Register widget activity result launchers
-        widgetPickerLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            if (result.resultCode == RESULT_OK) {
-                val widgetId = result.data?.getIntExtra(
-                    AppWidgetManager.EXTRA_APPWIDGET_ID,
-                    AppWidgetManager.INVALID_APPWIDGET_ID,
-                ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
-                if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    finishWidgetSetup(widgetId)
-                }
-            } else {
-                if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    widgetHostManager.appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                    pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-                }
-            }
-        }
-
-        widgetConfigureLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            if (result.resultCode == RESULT_OK && pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                widgetHostManager.saveWidgetId(pendingWidgetId)
-                loadWidget(pendingWidgetId)
-                pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-            }
-        }
-
-        // Request location permission
+        // Request permissions
         locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-
-        // Restore widget if previously configured
-        if (widgetHostManager.isConfigured) {
-            loadWidget(widgetHostManager.savedWidgetId)
-        }
+        storagePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
 
         setContent {
             PalmaLauncherTheme {
@@ -137,10 +104,11 @@ class LauncherActivity : ComponentActivity() {
                 HomeScreen(
                     apps = apps,
                     weatherData = weatherState.value,
-                    widgetView = widgetViewState.value,
+                    recentBooks = recentBooksState.value,
                     onAppClick = { app -> launchApp(app) },
                     onContextMenuAction = { app, action -> handleContextMenu(app, action) },
-                    onWidgetConfigureClick = { startWidgetPicker() },
+                    onAllBooksClick = { openLibrary() },
+                    onBookClick = { book -> openBook(book) },
                 )
 
                 // Rename dialog
@@ -184,16 +152,11 @@ class LauncherActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        widgetHostManager.startListening()
         refreshAppList()
+        refreshRecentBooks()
         if (weatherRepository.isStale()) {
             refreshWeather()
         }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        widgetHostManager.stopListening()
     }
 
     private fun handleContextMenu(app: AppEntry, action: ContextMenuAction) {
@@ -281,45 +244,69 @@ class LauncherActivity : ComponentActivity() {
         refreshAppList()
     }
 
-    // --- Widget ---
+    // --- Library ---
 
-    private fun startWidgetPicker() {
-        pendingWidgetId = widgetHostManager.allocateWidgetId()
-        val pickIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
-        }
-        widgetPickerLauncher.launch(pickIntent)
-    }
-
-    private fun finishWidgetSetup(appWidgetId: Int) {
-        val providerInfo = widgetHostManager.appWidgetManager.getAppWidgetInfo(appWidgetId)
-        if (providerInfo == null) {
-            // Widget not bound — picker failed or returned invalid state
-            widgetHostManager.appWidgetHost.deleteAppWidgetId(appWidgetId)
-            pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-            return
-        }
-
-        // Widget is already bound (ACTION_APPWIDGET_PICK binds it).
-        // Check if the provider requires a configure activity.
-        if (providerInfo.configure != null) {
-            pendingWidgetId = appWidgetId
-            val configureIntent = Intent().apply {
-                component = providerInfo.configure
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+    private fun refreshRecentBooks() {
+        lifecycleScope.launch {
+            val books = withContext(Dispatchers.IO) {
+                val raw = BookRepository.getRecentBooks(this@LauncherActivity)
+                raw.map { book ->
+                    val cover = CoverExtractor.getOrExtractCover(
+                        this@LauncherActivity,
+                        book.filePath,
+                        book.fileType,
+                    )
+                    book.copy(coverBitmap = cover)
+                }
             }
-            widgetConfigureLauncher.launch(configureIntent)
-            return
+            recentBooksState.value = books
         }
-
-        widgetHostManager.saveWidgetId(appWidgetId)
-        loadWidget(appWidgetId)
-        pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     }
 
-    private fun loadWidget(appWidgetId: Int) {
-        val view = widgetHostManager.createWidgetView(appWidgetId)
-        widgetViewState.value = view
+    private fun openLibrary() {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                component = ComponentName("com.onyx", "com.onyx.common.library.ui.LibraryActivity")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            // Library unavailable — silently ignore
+        } catch (_: Exception) {
+            // Unexpected error — silently ignore
+        }
+    }
+
+    private fun openBook(book: RecentBook) {
+        val file = File(book.filePath)
+        if (!file.exists()) return
+
+        val mimeType = when (book.fileType.lowercase()) {
+            "epub" -> "application/epub+zip"
+            "pdf" -> "application/pdf"
+            "mobi" -> "application/x-mobipocket-ebook"
+            else -> "application/octet-stream"
+        }
+
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                setPackage("com.onyx.kreader")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            // NeoReader can't handle it — try without package restriction
+            try {
+                val fallback = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeType)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(fallback)
+            } catch (_: Exception) { }
+        } catch (_: Exception) { }
     }
 
     // --- Weather ---
@@ -389,8 +376,6 @@ class LauncherActivity : ComponentActivity() {
 
         // Also check all installed packages for launchable apps that lack
         // CATEGORY_LAUNCHER (e.g. Boox NeoReader and other system apps).
-        // These apps have no standard launch intent, so we find their first
-        // exported activity and launch by explicit component name.
         val installedPackages = packageManager.getInstalledApplications(0)
         for (appInfo in installedPackages) {
             val pkg = appInfo.packageName

@@ -2,7 +2,6 @@ package com.palma.launcher.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.appwidget.AppWidgetManager
 import org.json.JSONObject
 
 class PreferencesManager(context: Context) {
@@ -13,7 +12,6 @@ class PreferencesManager(context: Context) {
     companion object {
         private const val KEY_HIDDEN_APPS = "hidden_apps"
         private const val KEY_RENAMED_APPS = "renamed_apps"
-        private const val KEY_WIDGET_ID = "widget_id"
         private const val KEY_WEATHER_TEMP = "weather_temp"
         private const val KEY_WEATHER_CODE = "weather_code"
         private const val KEY_WEATHER_TIMESTAMP = "weather_timestamp"
@@ -65,15 +63,6 @@ class PreferencesManager(context: Context) {
         val map = getRenamedApps().toMutableMap()
         map.remove(packageName)
         prefs.edit().putString(KEY_RENAMED_APPS, JSONObject(map as Map<*, *>).toString()).apply()
-    }
-
-    // --- Widget ---
-
-    fun getWidgetId(): Int =
-        prefs.getInt(KEY_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-
-    fun setWidgetId(id: Int) {
-        prefs.edit().putInt(KEY_WIDGET_ID, id).apply()
     }
 
     // --- Weather ---
