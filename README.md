@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="seasalt_icon.png" width="128" alt="seasalt icon">
+  <img src="docs/seasalt_icon.png" width="128" alt="seasalt icon">
 </p>
 
 <h3 align="center">seasalt</h3>
@@ -7,7 +7,7 @@
 <p align="center">A minimal, e-ink-optimized home screen launcher for the Boox Palma.</p>
 
 <p align="center">
-  <img src="screenshot.png" width="300" alt="seasalt screenshot">
+  <img src="docs/screenshot.png" width="300" alt="seasalt screenshot">
 </p>
 
 ## Features
@@ -19,7 +19,7 @@
 - Right-aligned app list (text only, no icons) — discovers all apps including Boox system apps
 - Long-press context menu: rename, hide, show hidden, app info
 - Whitelist-based app visibility — only selected apps shown by default
-- Library section: 3 most recently read book covers with progress banners
+- Library section: 2 most recently read book covers with progress banners
 - Tap a book cover to resume reading in NeoReader
 - "All >" link opens Boox system library
 

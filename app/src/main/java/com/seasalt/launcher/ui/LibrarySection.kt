@@ -58,7 +58,7 @@ fun LibrarySection(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(260.dp)
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -75,7 +75,7 @@ fun LibrarySection(
                 horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.Top,
             ) {
-                val books = recentBooks.take(3).reversed()
+                val books = recentBooks.take(2).reversed()
                 for (book in books) {
                     BookCover(
                         book = book,
@@ -95,10 +95,10 @@ private fun BookCover(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val coverShape = RoundedCornerShape(8.dp)
+    val coverShape = RoundedCornerShape(14.dp)
     Box(
         modifier = modifier
-            .height(150.dp)
+            .height(260.dp)
             .clip(coverShape)
             .clickable { onClick() },
     ) {
@@ -107,14 +107,14 @@ private fun BookCover(
                 bitmap = book.coverBitmap.asImageBitmap(),
                 contentDescription = book.title,
                 contentScale = ContentScale.FillHeight,
-                modifier = Modifier.height(150.dp).clip(coverShape),
+                modifier = Modifier.height(260.dp).clip(coverShape),
             )
         } else {
             // Placeholder: black border box with title text
             Box(
                 modifier = Modifier
-                    .width(120.dp)
-                    .height(150.dp)
+                    .width(208.dp)
+                    .height(260.dp)
                     .border(1.dp, Color.Black, coverShape)
                     .background(Color.White, coverShape),
                 contentAlignment = Alignment.Center,
@@ -132,14 +132,14 @@ private fun BookCover(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(end = 6.dp)
-                    .width(27.dp)
-                    .height(22.dp),
+                    .padding(end = 7.dp)
+                    .width(31.dp)
+                    .height(35.dp),
             ) {
                 Canvas(modifier = Modifier.matchParentSize()) {
                     val w = size.width
                     val h = size.height
-                    val chevronDepth = 4.dp.toPx()
+                    val chevronDepth = 15.dp.toPx()
                     val path = Path().apply {
                         moveTo(0f, 0f)
                         lineTo(w, 0f)
@@ -153,11 +153,11 @@ private fun BookCover(
                 Text(
                     text = "${book.progressPercent}%",
                     color = Color.Black,
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 4.dp),
+                        .padding(top = 5.dp),
                 )
             }
         }
