@@ -1,0 +1,33 @@
+*.iml
+.gradle/
+build/
+/local.properties
+/.idea/
+.DS_Store
+/captures
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.jar
+*.log
+*.tmp
+*.swp
+.env*
+Thumbs.db
+
+# Android SDK (should not be in repo)
+build-tools/
+platforms/
+platform-tools/
+cmdline-tools/
+
+# Claude
+.claude/
+CLAUDE.md
+
+# Gradle wrapper jar is intentionally tracked
+!gradle/wrapper/gradle-wrapper.jar
