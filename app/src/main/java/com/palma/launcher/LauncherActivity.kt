@@ -249,7 +249,7 @@ class LauncherActivity : ComponentActivity() {
     private fun refreshRecentBooks() {
         lifecycleScope.launch {
             val books = withContext(Dispatchers.IO) {
-                val raw = BookRepository.getRecentBooks(this@LauncherActivity)
+                val raw = BookRepository.getRecentBooks(this@LauncherActivity, limit = 3)
                 raw.map { book ->
                     val cover = CoverExtractor.getOrExtractCover(
                         this@LauncherActivity,

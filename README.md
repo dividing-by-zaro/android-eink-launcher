@@ -9,7 +9,7 @@ A minimal, e-ink-optimized home screen launcher for the Boox Palma.
 - [x] Single info row: date · battery · weather
 - [x] Right-aligned app list (text only, no icons) — discovers all apps including Boox system apps (NeoReader, etc.) that lack standard launcher intents
 - [x] Long-press context menu: rename, hide, show hidden, app info
-- [x] Library section: 2 most recently read book covers with progress banners
+- [x] Library section: 3 most recently read book covers with rounded corners and chevron progress banners
 - [x] Tap a book cover to resume reading in NeoReader
 - [x] "All >" link opens Boox system library
 - [x] System status bar hidden for full-screen experience
