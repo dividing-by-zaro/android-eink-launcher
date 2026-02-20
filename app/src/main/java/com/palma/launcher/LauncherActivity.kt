@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -74,6 +76,7 @@ class LauncherActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         prefsManager = PreferencesManager(this)
         weatherRepository = WeatherRepository(this, prefsManager)
         widgetHostManager = WidgetHostManager(this, prefsManager)
@@ -167,6 +170,13 @@ class LauncherActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+
+        // Hide the system status bar (must be after setContent so DecorView exists)
+        window.insetsController?.let { controller ->
+            controller.hide(WindowInsets.Type.statusBars())
+            controller.systemBarsBehavior =
+                WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }
 

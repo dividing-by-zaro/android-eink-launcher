@@ -33,7 +33,8 @@ fun HomeScreen(
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .background(Color.White),
+                .background(Color.White)
+                .padding(top = 24.dp),
         ) {
             // Zone 1: Header (pinned)
             HeaderSection(
