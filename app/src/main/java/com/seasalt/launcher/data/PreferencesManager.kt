@@ -1,4 +1,4 @@
-package com.palma.launcher.data
+package com.seasalt.launcher.data
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -7,7 +7,7 @@ import org.json.JSONObject
 class PreferencesManager(context: Context) {
 
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("palma_launcher", Context.MODE_PRIVATE)
+        context.getSharedPreferences("seasalt", Context.MODE_PRIVATE)
 
     companion object {
         private const val KEY_HIDDEN_APPS = "hidden_apps"

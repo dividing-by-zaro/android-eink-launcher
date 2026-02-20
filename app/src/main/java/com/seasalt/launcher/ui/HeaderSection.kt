@@ -1,4 +1,4 @@
-package com.palma.launcher.ui
+package com.seasalt.launcher.ui
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -40,7 +40,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.palma.launcher.data.WeatherData
+import com.seasalt.launcher.data.WeatherData
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

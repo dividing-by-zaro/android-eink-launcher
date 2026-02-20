@@ -1,4 +1,4 @@
-package com.palma.launcher.ui.theme
+package com.seasalt.launcher.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -82,7 +82,7 @@ private val EinkTypography = Typography(
 )
 
 @Composable
-fun PalmaLauncherTheme(content: @Composable () -> Unit) {
+fun SeasaltTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = EinkColorScheme,
         typography = EinkTypography,

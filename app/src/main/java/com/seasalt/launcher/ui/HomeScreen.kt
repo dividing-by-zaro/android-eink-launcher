@@ -1,4 +1,4 @@
-package com.palma.launcher.ui
+package com.seasalt.launcher.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
@@ -12,9 +12,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.palma.launcher.data.AppEntry
-import com.palma.launcher.data.RecentBook
-import com.palma.launcher.data.WeatherData
+import com.seasalt.launcher.data.AppEntry
+import com.seasalt.launcher.data.RecentBook
+import com.seasalt.launcher.data.WeatherData
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

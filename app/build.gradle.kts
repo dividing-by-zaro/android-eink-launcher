@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.palma.launcher"
+    namespace = "com.seasalt.launcher"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.palma.launcher"
+        applicationId = "com.seasalt.launcher"
         minSdk = 30
         targetSdk = 34
         versionCode = 1

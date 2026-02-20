@@ -1,4 +1,4 @@
-package com.palma.launcher
+package com.seasalt.launcher
 
 import android.Manifest
 import android.content.ActivityNotFoundException
@@ -19,19 +19,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.lifecycleScope
-import com.palma.launcher.data.AppEntry
-import com.palma.launcher.data.BookRepository
-import com.palma.launcher.data.CoverExtractor
-import com.palma.launcher.data.PreferencesManager
-import com.palma.launcher.data.RecentBook
-import com.palma.launcher.data.WeatherData
-import com.palma.launcher.data.WeatherRepository
-import com.palma.launcher.ui.ContextMenuAction
-import com.palma.launcher.ui.HiddenAppInfo
-import com.palma.launcher.ui.HiddenAppsDialog
-import com.palma.launcher.ui.HomeScreen
-import com.palma.launcher.ui.RenameDialog
-import com.palma.launcher.ui.theme.PalmaLauncherTheme
+import com.seasalt.launcher.data.AppEntry
+import com.seasalt.launcher.data.BookRepository
+import com.seasalt.launcher.data.CoverExtractor
+import com.seasalt.launcher.data.PreferencesManager
+import com.seasalt.launcher.data.RecentBook
+import com.seasalt.launcher.data.WeatherData
+import com.seasalt.launcher.data.WeatherRepository
+import com.seasalt.launcher.ui.ContextMenuAction
+import com.seasalt.launcher.ui.HiddenAppInfo
+import com.seasalt.launcher.ui.HiddenAppsDialog
+import com.seasalt.launcher.ui.HomeScreen
+import com.seasalt.launcher.ui.RenameDialog
+import com.seasalt.launcher.ui.theme.SeasaltTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -68,13 +68,14 @@ class LauncherActivity : ComponentActivity() {
     }
 
     companion object {
-        private val DEFAULT_HIDDEN_PACKAGES = setOf(
-            "com.android.htmlviewer",
-            "com.android.printspooler",
-            "com.android.bips",
-            "com.android.calllogbackup",
-            "com.android.providers.calendar",
-            "com.android.providers.contacts",
+        private val DEFAULT_VISIBLE_PACKAGES = setOf(
+            "com.overdrive.mobile.android.libby",
+            "com.thestorygraph.thestorygraph",
+            "com.android.documentsui",
+            "com.android.vending",
+            "com.android.settings",
+            "com.nutomic.syncthingandroid",
+            "com.github.catfriend1.syncthingandroid",
         )
     }
 
@@ -84,10 +85,11 @@ class LauncherActivity : ComponentActivity() {
         prefsManager = PreferencesManager(this)
         weatherRepository = WeatherRepository(this, prefsManager)
 
-        // First-run: set default hidden apps
+        // First-run: whitelist — hide everything except default visible apps
         if (prefsManager.isFirstRun()) {
-            val defaultHidden = DEFAULT_HIDDEN_PACKAGES + packageName
-            prefsManager.setHiddenApps(defaultHidden)
+            val allPackages = discoverAllPackages()
+            val hidden = (allPackages - DEFAULT_VISIBLE_PACKAGES) + packageName
+            prefsManager.setHiddenApps(hidden)
             prefsManager.setFirstRunComplete()
         }
 
@@ -99,7 +101,7 @@ class LauncherActivity : ComponentActivity() {
         storagePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
 
         setContent {
-            PalmaLauncherTheme {
+            SeasaltTheme {
                 BackHandler { /* consume back press on home screen */ }
                 HomeScreen(
                     apps = apps,
@@ -348,6 +350,32 @@ class LauncherActivity : ComponentActivity() {
             data = Uri.parse("package:${app.packageName}")
         }
         startActivity(intent)
+    }
+
+    // --- App discovery ---
+
+    private fun discoverAllPackages(): Set<String> {
+        val packages = mutableSetOf<String>()
+        val launcherIntent = Intent(Intent.ACTION_MAIN, null)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+        for (info in packageManager.queryIntentActivities(launcherIntent, 0)) {
+            packages.add(info.activityInfo.packageName)
+        }
+        for (appInfo in packageManager.getInstalledApplications(0)) {
+            val pkg = appInfo.packageName
+            if (pkg in packages) continue
+            if (packageManager.getLaunchIntentForPackage(pkg) != null) {
+                packages.add(pkg)
+                continue
+            }
+            try {
+                val pkgInfo = packageManager.getPackageInfo(pkg, PM.GET_ACTIVITIES)
+                if (pkgInfo.activities?.any { it.exported } == true) {
+                    packages.add(pkg)
+                }
+            } catch (_: Exception) { }
+        }
+        return packages
     }
 
     // --- App list ---

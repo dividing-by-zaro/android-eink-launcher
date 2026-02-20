@@ -1,4 +1,4 @@
-package com.palma.launcher.data
+package com.seasalt.launcher.data
 
 data class AppEntry(
     val packageName: String,

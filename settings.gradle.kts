@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PalmaLauncher"
+rootProject.name = "seasalt"
 include(":app")

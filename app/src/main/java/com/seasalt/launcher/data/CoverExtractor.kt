@@ -1,4 +1,4 @@
-package com.palma.launcher.data
+package com.seasalt.launcher.data
 
 import android.content.Context
 import android.graphics.Bitmap

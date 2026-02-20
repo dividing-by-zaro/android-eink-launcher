@@ -1,4 +1,4 @@
-package com.palma.launcher.ui
+package com.seasalt.launcher.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -28,7 +28,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.palma.launcher.data.RecentBook
+import com.seasalt.launcher.data.RecentBook
 
 @Composable
 fun LibrarySection(

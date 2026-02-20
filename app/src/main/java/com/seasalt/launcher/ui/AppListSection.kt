@@ -1,4 +1,4 @@
-package com.palma.launcher.ui
+package com.seasalt.launcher.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -23,7 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.palma.launcher.data.AppEntry
+import com.seasalt.launcher.data.AppEntry
 
 enum class ContextMenuAction {
     RENAME,

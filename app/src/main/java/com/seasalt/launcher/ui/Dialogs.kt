@@ -1,4 +1,4 @@
-package com.palma.launcher.ui
+package com.seasalt.launcher.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
