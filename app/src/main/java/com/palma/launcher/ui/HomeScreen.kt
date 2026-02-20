@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -34,23 +33,19 @@ fun HomeScreen(
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .background(Color.White)
-                .padding(horizontal = 16.dp),
+                .background(Color.White),
         ) {
             // Zone 1: Header (pinned)
             HeaderSection(
                 weatherData = weatherData,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
 
-            HorizontalDivider(color = Color.Black, thickness = 1.dp)
-
-            // Zone 2: Widget (pinned)
+            // Zone 2: Widget (pinned, full width)
             WidgetSection(
                 widgetView = widgetView,
                 onConfigureClick = onWidgetConfigureClick,
             )
-
-            HorizontalDivider(color = Color.Black, thickness = 1.dp)
 
             // Zone 3: App list (scrollable)
             AppListSection(
@@ -59,7 +54,8 @@ fun HomeScreen(
                 onContextMenuAction = onContextMenuAction,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
             )
         }
     }

@@ -59,7 +59,6 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private lateinit var widgetPickerLauncher: ActivityResultLauncher<Intent>
-    private lateinit var widgetBindLauncher: ActivityResultLauncher<Intent>
     private lateinit var widgetConfigureLauncher: ActivityResultLauncher<Intent>
 
     companion object {
@@ -101,19 +100,6 @@ class LauncherActivity : ComponentActivity() {
                 if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     finishWidgetSetup(widgetId)
                 }
-            } else {
-                if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    widgetHostManager.appWidgetHost.deleteAppWidgetId(pendingWidgetId)
-                    pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-                }
-            }
-        }
-
-        widgetBindLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult(),
-        ) { result ->
-            if (result.resultCode == RESULT_OK && pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                finishWidgetSetup(pendingWidgetId)
             } else {
                 if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                     widgetHostManager.appWidgetHost.deleteAppWidgetId(pendingWidgetId)
@@ -276,18 +262,14 @@ class LauncherActivity : ComponentActivity() {
     private fun finishWidgetSetup(appWidgetId: Int) {
         val providerInfo = widgetHostManager.appWidgetManager.getAppWidgetInfo(appWidgetId)
         if (providerInfo == null) {
-            widgetHostManager.saveWidgetId(appWidgetId)
-            loadWidget(appWidgetId)
+            // Widget not bound — picker failed or returned invalid state
+            widgetHostManager.appWidgetHost.deleteAppWidgetId(appWidgetId)
+            pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
             return
         }
 
-        if (!widgetHostManager.bindWidget(appWidgetId, providerInfo)) {
-            pendingWidgetId = appWidgetId
-            val bindIntent = widgetHostManager.getBindIntent(appWidgetId, providerInfo)
-            widgetBindLauncher.launch(bindIntent)
-            return
-        }
-
+        // Widget is already bound (ACTION_APPWIDGET_PICK binds it).
+        // Check if the provider requires a configure activity.
         if (providerInfo.configure != null) {
             pendingWidgetId = appWidgetId
             val configureIntent = Intent().apply {
@@ -300,6 +282,7 @@ class LauncherActivity : ComponentActivity() {
 
         widgetHostManager.saveWidgetId(appWidgetId)
         loadWidget(appWidgetId)
+        pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     }
 
     private fun loadWidget(appWidgetId: Int) {
