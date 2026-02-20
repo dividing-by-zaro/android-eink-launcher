@@ -7,7 +7,7 @@ A minimal, e-ink-optimized home screen launcher for the Boox Palma.
 - [x] Battery icon with percentage (Canvas-drawn)
 - [x] Weather with Material Icons (sun, cloud, rain, snow, etc.) via Open-Meteo API
 - [x] Single info row: date · battery · weather
-- [x] Right-aligned app list (text only, no icons)
+- [x] Right-aligned app list (text only, no icons) — discovers all apps including Boox system apps (NeoReader, etc.) that lack standard launcher intents
 - [x] Long-press context menu: rename, hide, show hidden, app info
 - [x] Widget hosting (any Android widget)
 - [x] System status bar hidden for full-screen experience

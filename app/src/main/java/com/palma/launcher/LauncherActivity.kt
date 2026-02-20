@@ -3,7 +3,9 @@ package com.palma.launcher
 import android.Manifest
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.PackageManager as PM
 import android.net.Uri
 import android.os.Bundle
 import android.view.WindowInsets
@@ -229,22 +231,42 @@ class LauncherActivity : ComponentActivity() {
         val hiddenPackages = prefsManager.getHiddenApps()
         val renamedApps = prefsManager.getRenamedApps()
 
-        val intent = Intent(Intent.ACTION_MAIN, null)
+        // Standard CATEGORY_LAUNCHER apps
+        val launcherIntent = Intent(Intent.ACTION_MAIN, null)
             .addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolveInfos = packageManager.queryIntentActivities(intent, 0)
+        val resolveInfos = packageManager.queryIntentActivities(launcherIntent, 0)
 
-        val hiddenInfos = resolveInfos
-            .filter { it.activityInfo.packageName in hiddenPackages }
-            .map { info ->
-                val pkg = info.activityInfo.packageName
-                val systemName = info.loadLabel(packageManager).toString()
-                val displayName = renamedApps[pkg] ?: systemName
-                HiddenAppInfo(pkg, displayName)
+        val hiddenByPackage = mutableMapOf<String, HiddenAppInfo>()
+
+        for (info in resolveInfos) {
+            val pkg = info.activityInfo.packageName
+            if (pkg !in hiddenPackages) continue
+            val systemName = info.loadLabel(packageManager).toString()
+            hiddenByPackage[pkg] = HiddenAppInfo(pkg, renamedApps[pkg] ?: systemName)
+        }
+
+        // Also check installed packages for launchable apps without CATEGORY_LAUNCHER
+        val installedPackages = packageManager.getInstalledApplications(0)
+        for (appInfo in installedPackages) {
+            val pkg = appInfo.packageName
+            if (pkg !in hiddenPackages || pkg in hiddenByPackage) continue
+            if (packageManager.getLaunchIntentForPackage(pkg) != null) {
+                val systemName = appInfo.loadLabel(packageManager).toString()
+                hiddenByPackage[pkg] = HiddenAppInfo(pkg, renamedApps[pkg] ?: systemName)
+                continue
             }
-            .sortedBy { it.displayName.lowercase() }
+            // Fallback: check for exported activity
+            try {
+                val pkgInfo = packageManager.getPackageInfo(pkg, PM.GET_ACTIVITIES)
+                if (pkgInfo.activities?.any { it.exported } == true) {
+                    val systemName = appInfo.loadLabel(packageManager).toString()
+                    hiddenByPackage[pkg] = HiddenAppInfo(pkg, renamedApps[pkg] ?: systemName)
+                }
+            } catch (_: Exception) { }
+        }
 
         hiddenAppsList.clear()
-        hiddenAppsList.addAll(hiddenInfos)
+        hiddenAppsList.addAll(hiddenByPackage.values.sortedBy { it.displayName.lowercase() })
     }
 
     // --- Rename ---
@@ -317,6 +339,18 @@ class LauncherActivity : ComponentActivity() {
         val intent = packageManager.getLaunchIntentForPackage(app.packageName)
         if (intent != null) {
             startActivity(intent)
+        } else if (app.activityName.isNotEmpty()) {
+            // Fallback: launch by explicit component (for apps like NeoReader
+            // that have no standard launch intent)
+            val explicit = Intent(Intent.ACTION_MAIN).apply {
+                component = ComponentName(app.packageName, app.activityName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                startActivity(explicit)
+            } catch (_: Exception) {
+                Toast.makeText(this, "Cannot launch ${app.displayName}", Toast.LENGTH_SHORT).show()
+            }
         } else {
             Toast.makeText(this, "Cannot launch ${app.displayName}", Toast.LENGTH_SHORT).show()
         }
@@ -332,25 +366,65 @@ class LauncherActivity : ComponentActivity() {
     // --- App list ---
 
     private fun refreshAppList() {
-        val intent = Intent(
-            Intent.ACTION_MAIN, null
-        ).addCategory(Intent.CATEGORY_LAUNCHER)
-
-        val resolveInfos = packageManager.queryIntentActivities(intent, 0)
         val hiddenApps = prefsManager.getHiddenApps()
         val renamedApps = prefsManager.getRenamedApps()
 
-        val entries = resolveInfos.map { info ->
+        // Standard CATEGORY_LAUNCHER apps
+        val launcherIntent = Intent(Intent.ACTION_MAIN, null)
+            .addCategory(Intent.CATEGORY_LAUNCHER)
+        val resolveInfos = packageManager.queryIntentActivities(launcherIntent, 0)
+
+        val entriesByPackage = mutableMapOf<String, AppEntry>()
+
+        for (info in resolveInfos) {
             val pkg = info.activityInfo.packageName
-            AppEntry(
+            entriesByPackage[pkg] = AppEntry(
                 packageName = pkg,
                 systemName = info.loadLabel(packageManager).toString(),
                 customName = renamedApps[pkg],
                 isHidden = pkg in hiddenApps,
                 activityName = info.activityInfo.name,
             )
-        }.filter { !it.isHidden }.sorted()
+        }
 
+        // Also check all installed packages for launchable apps that lack
+        // CATEGORY_LAUNCHER (e.g. Boox NeoReader and other system apps).
+        // These apps have no standard launch intent, so we find their first
+        // exported activity and launch by explicit component name.
+        val installedPackages = packageManager.getInstalledApplications(0)
+        for (appInfo in installedPackages) {
+            val pkg = appInfo.packageName
+            if (pkg in entriesByPackage) continue
+
+            // First try the standard getLaunchIntentForPackage
+            if (packageManager.getLaunchIntentForPackage(pkg) != null) {
+                entriesByPackage[pkg] = AppEntry(
+                    packageName = pkg,
+                    systemName = appInfo.loadLabel(packageManager).toString(),
+                    customName = renamedApps[pkg],
+                    isHidden = pkg in hiddenApps,
+                    activityName = "",
+                )
+                continue
+            }
+
+            // Fallback: find first exported activity with an intent filter
+            try {
+                val pkgInfo = packageManager.getPackageInfo(pkg, PM.GET_ACTIVITIES)
+                val activity = pkgInfo.activities?.firstOrNull { it.exported }
+                if (activity != null) {
+                    entriesByPackage[pkg] = AppEntry(
+                        packageName = pkg,
+                        systemName = appInfo.loadLabel(packageManager).toString(),
+                        customName = renamedApps[pkg],
+                        isHidden = pkg in hiddenApps,
+                        activityName = activity.name,
+                    )
+                }
+            } catch (_: Exception) { }
+        }
+
+        val entries = entriesByPackage.values.filter { !it.isHidden }.sorted()
         apps.clear()
         apps.addAll(entries)
     }
