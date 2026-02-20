@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/seasalt_icon.png" width="128" alt="seasalt icon">
+  <img src="docs/seasalt_icon.png" width="64" alt="seasalt icon">
 </p>
 
 <h3 align="center">seasalt</h3>
