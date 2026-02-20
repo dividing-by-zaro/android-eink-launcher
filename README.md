@@ -7,7 +7,7 @@
 <p align="center">A minimal, e-ink-optimized home screen launcher for the Boox Palma.</p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="300" alt="seasalt screenshot">
+  <picture><img src="docs/screenshot.png" width="210" alt="seasalt screenshot" style="border: 1px solid #ccc; border-radius: 8px;"></picture>
 </p>
 
 ## Features
