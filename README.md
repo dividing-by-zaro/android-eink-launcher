@@ -16,7 +16,7 @@
 - Live clock with full date
 - Battery icon with percentage (Canvas-drawn)
 - Weather with icon and temperature via Open-Meteo API
-- Right-aligned app list (text only, no icons) — discovers all apps including Boox system apps
+- Centered app list (text only, no icons) — discovers all apps including Boox system apps
 - Long-press context menu: rename, hide, show hidden, app info
 - Whitelist-based app visibility — only selected apps shown by default
 - Library section: 2 most recently read book covers with progress banners

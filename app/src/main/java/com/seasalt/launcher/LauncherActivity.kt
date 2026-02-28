@@ -267,15 +267,13 @@ class LauncherActivity : ComponentActivity() {
 
     private fun openLibrary() {
         try {
-            val intent = Intent(Intent.ACTION_MAIN).apply {
+            val intent = Intent("com.onyx.action.LIBRARY").apply {
                 component = ComponentName("com.onyx", "com.onyx.common.library.ui.LibraryActivity")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-        } catch (_: ActivityNotFoundException) {
-            // Library unavailable — silently ignore
-        } catch (_: Exception) {
-            // Unexpected error — silently ignore
+        } catch (e: Exception) {
+            Toast.makeText(this, "Cannot open library: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 

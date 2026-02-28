@@ -87,7 +87,7 @@ private fun AppListItem(
                 onLongClick = { showMenu = true },
             )
             .padding(vertical = 12.dp),
-        contentAlignment = Alignment.CenterEnd,
+        contentAlignment = Alignment.Center,
     ) {
         Text(
             text = app.displayName,
