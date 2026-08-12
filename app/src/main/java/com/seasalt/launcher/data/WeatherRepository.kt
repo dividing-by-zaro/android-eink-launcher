@@ -50,8 +50,8 @@ class WeatherRepository(
 
     private companion object {
         const val STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000L // 2 hours
-        const val DEFAULT_LAT = 36.17f
-        const val DEFAULT_LON = -115.14f
+        const val DEFAULT_LAT = 37.39f
+        const val DEFAULT_LON = -122.08f
     }
 
     fun getCachedWeather(): WeatherData? {

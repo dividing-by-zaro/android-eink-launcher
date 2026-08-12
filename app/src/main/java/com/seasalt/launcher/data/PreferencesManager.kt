@@ -76,10 +76,10 @@ class PreferencesManager(context: Context) {
     fun getWeatherTimestamp(): Long = prefs.getLong(KEY_WEATHER_TIMESTAMP, 0L)
     fun setWeatherTimestamp(ts: Long) { prefs.edit().putLong(KEY_WEATHER_TIMESTAMP, ts).apply() }
 
-    fun getWeatherLat(): Float = prefs.getFloat(KEY_WEATHER_LAT, 36.17f)
+    fun getWeatherLat(): Float = prefs.getFloat(KEY_WEATHER_LAT, 37.39f)
     fun setWeatherLat(lat: Float) { prefs.edit().putFloat(KEY_WEATHER_LAT, lat).apply() }
 
-    fun getWeatherLon(): Float = prefs.getFloat(KEY_WEATHER_LON, -115.14f)
+    fun getWeatherLon(): Float = prefs.getFloat(KEY_WEATHER_LON, -122.08f)
     fun setWeatherLon(lon: Float) { prefs.edit().putFloat(KEY_WEATHER_LON, lon).apply() }
 
     // --- First run ---
