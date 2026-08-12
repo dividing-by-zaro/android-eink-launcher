@@ -5,14 +5,26 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.util.LruCache
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 object CoverExtractor {
+
+    /** Covers survive at most this many entries on disk before the oldest are evicted. */
+    private const val MAX_CACHED_COVERS = 24
+
+    /**
+     * Decoded covers, keyed the same way as the disk cache. The launcher re-reads its
+     * recent books on every resume, so without this every Home press costs a file read
+     * plus a JPEG decode per book.
+     */
+    private val memoryCache = LruCache<String, Bitmap>(8)
 
     fun getOrExtractCover(
         context: Context,
@@ -22,10 +34,18 @@ object CoverExtractor {
         val bookFile = File(filePath)
         if (!bookFile.exists()) return null
 
+        val key = cacheKeyFor(bookFile)
+        memoryCache.get(key)?.let { return it }
+
         // Check disk cache
-        val cacheFile = cacheFileFor(context, bookFile)
+        val cacheFile = cacheFileFor(context, key)
         if (cacheFile.exists()) {
-            BitmapFactory.decodeFile(cacheFile.absolutePath)?.let { return it }
+            BitmapFactory.decodeFile(cacheFile.absolutePath)?.let { cached ->
+                // Mark as recently used so trimDiskCache evicts genuinely cold entries
+                cacheFile.setLastModified(System.currentTimeMillis())
+                memoryCache.put(key, cached)
+                return cached
+            }
         }
 
         // Extract cover
@@ -38,6 +58,8 @@ object CoverExtractor {
         // Cache to disk
         if (bitmap != null) {
             saveToDiskCache(cacheFile, bitmap)
+            trimDiskCache(cacheFile.parentFile)
+            memoryCache.put(key, bitmap)
         }
 
         return bitmap
@@ -201,9 +223,18 @@ object CoverExtractor {
 
     // --- Disk cache ---
 
-    private fun cacheFileFor(context: Context, bookFile: File): File {
-        val key = "${bookFile.absolutePath}:${bookFile.lastModified()}"
-        val hash = key.hashCode().toUInt().toString(16)
+    /**
+     * Keyed on mtime as well as path so a re-synced or progress-updated book
+     * re-extracts rather than serving a stale cover.
+     */
+    private fun cacheKeyFor(bookFile: File): String =
+        "${bookFile.absolutePath}:${bookFile.lastModified()}"
+
+    private fun cacheFileFor(context: Context, key: String): File {
+        // A 32-bit String.hashCode() collides often enough to serve the wrong
+        // book's cover, so digest the key instead.
+        val digest = MessageDigest.getInstance("MD5").digest(key.toByteArray())
+        val hash = digest.joinToString("") { "%02x".format(it) }
         val dir = File(context.cacheDir, "covers").also { it.mkdirs() }
         return File(dir, "$hash.jpg")
     }
@@ -213,6 +244,20 @@ object CoverExtractor {
             FileOutputStream(cacheFile).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
             }
+        } catch (_: Exception) { }
+    }
+
+    /**
+     * Each new mtime mints a new cache entry and orphans the old one, so without
+     * this the covers directory grows without bound.
+     */
+    private fun trimDiskCache(dir: File?) {
+        try {
+            val files = dir?.listFiles() ?: return
+            if (files.size <= MAX_CACHED_COVERS) return
+            files.sortedByDescending { it.lastModified() }
+                .drop(MAX_CACHED_COVERS)
+                .forEach { it.delete() }
         } catch (_: Exception) { }
     }
 }

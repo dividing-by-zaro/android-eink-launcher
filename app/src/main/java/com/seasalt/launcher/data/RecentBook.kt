@@ -18,7 +18,8 @@ data class RecentBook(
             val current = parts[0].trim().toIntOrNull() ?: return null
             val total = parts[1].trim().toIntOrNull() ?: return null
             if (total <= 0) return null
-            return (current * 100) / total
+            // Onyx reports currentPage > totalPages at the end of some books
+            return ((current * 100) / total).coerceIn(0, 100)
         }
     }
 }

@@ -2,10 +2,14 @@ package com.seasalt.launcher
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager as PM
 import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import android.os.Bundle
 import android.view.WindowInsets
@@ -18,10 +22,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.seasalt.launcher.data.AppEntry
 import com.seasalt.launcher.data.BookRepository
 import com.seasalt.launcher.data.CoverExtractor
+import com.seasalt.launcher.data.DiscoveredApp
 import com.seasalt.launcher.data.PreferencesManager
 import com.seasalt.launcher.data.RecentBook
 import com.seasalt.launcher.data.WeatherData
@@ -32,7 +38,10 @@ import com.seasalt.launcher.ui.HiddenAppsDialog
 import com.seasalt.launcher.ui.HomeScreen
 import com.seasalt.launcher.ui.RenameDialog
 import com.seasalt.launcher.ui.theme.SeasaltTheme
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -48,6 +57,24 @@ class LauncherActivity : ComponentActivity() {
     val apps = mutableStateListOf<AppEntry>()
     val weatherState = mutableStateOf<WeatherData?>(null)
     val recentBooksState = mutableStateOf<List<RecentBook>>(emptyList())
+
+    /** Cached package scan, shared by the app list, the hidden list and first-run seeding. */
+    private var discoveryJob: Deferred<List<DiscoveredApp>>? = null
+    private var appListDirty = true
+
+    /**
+     * The installed-app set almost never changes between resumes, so rescanning
+     * every time was pure waste. Invalidate only when the system says so —
+     * PACKAGE_CHANGED also covers the enable/disable that Onyx firmware performs.
+     */
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            appListDirty = true
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                refreshAppList()
+            }
+        }
+    }
 
     // Dialog state
     private val showRenameDialog = mutableStateOf(false)
@@ -85,13 +112,22 @@ class LauncherActivity : ComponentActivity() {
         prefsManager = PreferencesManager(this)
         weatherRepository = WeatherRepository(this, prefsManager)
 
-        // First-run: whitelist — hide everything except default visible apps
-        if (prefsManager.isFirstRun()) {
-            val allPackages = discoverAllPackages()
-            val hidden = (allPackages - DEFAULT_VISIBLE_PACKAGES) + packageName
-            prefsManager.setHiddenApps(hidden)
-            prefsManager.setFirstRunComplete()
+        // First-run whitelist seeding happens in refreshAppList(), which reuses the
+        // same package scan instead of running a second one on the main thread.
+
+        val packageFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addDataScheme("package")
         }
+        ContextCompat.registerReceiver(
+            this,
+            packageChangeReceiver,
+            packageFilter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
 
         // Load cached weather immediately
         weatherState.value = weatherRepository.getCachedWeather()
@@ -161,6 +197,11 @@ class LauncherActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(packageChangeReceiver)
+    }
+
     private fun handleContextMenu(app: AppEntry, action: ContextMenuAction) {
         when (action) {
             ContextMenuAction.RENAME -> {
@@ -193,45 +234,19 @@ class LauncherActivity : ComponentActivity() {
     }
 
     private fun refreshHiddenAppsList() {
-        val hiddenPackages = prefsManager.getHiddenApps()
-        val renamedApps = prefsManager.getRenamedApps()
+        lifecycleScope.launch {
+            val discovered = discoveredApps().ifEmpty { return@launch }
+            val hiddenPackages = prefsManager.getHiddenApps()
+            val renamedApps = prefsManager.getRenamedApps()
 
-        // Standard CATEGORY_LAUNCHER apps
-        val launcherIntent = Intent(Intent.ACTION_MAIN, null)
-            .addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolveInfos = packageManager.queryIntentActivities(launcherIntent, 0)
+            val entries = discovered
+                .filter { it.packageName in hiddenPackages }
+                .map { HiddenAppInfo(it.packageName, renamedApps[it.packageName] ?: it.systemName) }
+                .sortedBy { it.displayName.lowercase() }
 
-        val hiddenByPackage = mutableMapOf<String, HiddenAppInfo>()
-
-        for (info in resolveInfos) {
-            val pkg = info.activityInfo.packageName
-            if (pkg !in hiddenPackages) continue
-            val systemName = info.loadLabel(packageManager).toString()
-            hiddenByPackage[pkg] = HiddenAppInfo(pkg, renamedApps[pkg] ?: systemName)
+            hiddenAppsList.clear()
+            hiddenAppsList.addAll(entries)
         }
-
-        // Also check installed packages for launchable apps without CATEGORY_LAUNCHER
-        val installedPackages = packageManager.getInstalledApplications(0)
-        for (appInfo in installedPackages) {
-            val pkg = appInfo.packageName
-            if (pkg !in hiddenPackages || pkg in hiddenByPackage) continue
-            if (packageManager.getLaunchIntentForPackage(pkg) != null) {
-                val systemName = appInfo.loadLabel(packageManager).toString()
-                hiddenByPackage[pkg] = HiddenAppInfo(pkg, renamedApps[pkg] ?: systemName)
-                continue
-            }
-            // Fallback: check for exported activity
-            try {
-                val pkgInfo = packageManager.getPackageInfo(pkg, PM.GET_ACTIVITIES)
-                if (pkgInfo.activities?.any { it.exported } == true) {
-                    val systemName = appInfo.loadLabel(packageManager).toString()
-                    hiddenByPackage[pkg] = HiddenAppInfo(pkg, renamedApps[pkg] ?: systemName)
-                }
-            } catch (_: Exception) { }
-        }
-
-        hiddenAppsList.clear()
-        hiddenAppsList.addAll(hiddenByPackage.values.sortedBy { it.displayName.lowercase() })
     }
 
     // --- Rename ---
@@ -251,7 +266,7 @@ class LauncherActivity : ComponentActivity() {
     private fun refreshRecentBooks() {
         lifecycleScope.launch {
             val books = withContext(Dispatchers.IO) {
-                val raw = BookRepository.getRecentBooks(this@LauncherActivity, limit = 3)
+                val raw = BookRepository.getRecentBooks(this@LauncherActivity, limit = 2)
                 raw.map { book ->
                     val cover = CoverExtractor.getOrExtractCover(
                         this@LauncherActivity,
@@ -352,91 +367,122 @@ class LauncherActivity : ComponentActivity() {
 
     // --- App discovery ---
 
-    private fun discoverAllPackages(): Set<String> {
-        val packages = mutableSetOf<String>()
+    /**
+     * Three-tier discovery of every launchable package:
+     *   1. CATEGORY_LAUNCHER activities
+     *   2. packages with a standard launch intent
+     *   3. packages exposing an exported activity (e.g. Boox NeoReader)
+     *
+     * Costs a binder round trip per installed package, so it must never run on
+     * the main thread — go through [discoveredApps] rather than calling this.
+     */
+    private fun discoverInstalledApps(): List<DiscoveredApp> {
+        val byPackage = LinkedHashMap<String, DiscoveredApp>()
+
         val launcherIntent = Intent(Intent.ACTION_MAIN, null)
             .addCategory(Intent.CATEGORY_LAUNCHER)
         for (info in packageManager.queryIntentActivities(launcherIntent, 0)) {
-            packages.add(info.activityInfo.packageName)
-        }
-        for (appInfo in packageManager.getInstalledApplications(0)) {
-            val pkg = appInfo.packageName
-            if (pkg in packages) continue
-            if (packageManager.getLaunchIntentForPackage(pkg) != null) {
-                packages.add(pkg)
-                continue
-            }
-            try {
-                val pkgInfo = packageManager.getPackageInfo(pkg, PM.GET_ACTIVITIES)
-                if (pkgInfo.activities?.any { it.exported } == true) {
-                    packages.add(pkg)
-                }
-            } catch (_: Exception) { }
-        }
-        return packages
-    }
-
-    // --- App list ---
-
-    private fun refreshAppList() {
-        val hiddenApps = prefsManager.getHiddenApps()
-        val renamedApps = prefsManager.getRenamedApps()
-
-        // Standard CATEGORY_LAUNCHER apps
-        val launcherIntent = Intent(Intent.ACTION_MAIN, null)
-            .addCategory(Intent.CATEGORY_LAUNCHER)
-        val resolveInfos = packageManager.queryIntentActivities(launcherIntent, 0)
-
-        val entriesByPackage = mutableMapOf<String, AppEntry>()
-
-        for (info in resolveInfos) {
             val pkg = info.activityInfo.packageName
-            entriesByPackage[pkg] = AppEntry(
+            byPackage[pkg] = DiscoveredApp(
                 packageName = pkg,
                 systemName = info.loadLabel(packageManager).toString(),
-                customName = renamedApps[pkg],
-                isHidden = pkg in hiddenApps,
                 activityName = info.activityInfo.name,
             )
         }
 
-        // Also check all installed packages for launchable apps that lack
-        // CATEGORY_LAUNCHER (e.g. Boox NeoReader and other system apps).
-        val installedPackages = packageManager.getInstalledApplications(0)
-        for (appInfo in installedPackages) {
+        for (appInfo in packageManager.getInstalledApplications(0)) {
             val pkg = appInfo.packageName
-            if (pkg in entriesByPackage) continue
+            if (pkg in byPackage) continue
 
-            // First try the standard getLaunchIntentForPackage
             if (packageManager.getLaunchIntentForPackage(pkg) != null) {
-                entriesByPackage[pkg] = AppEntry(
+                byPackage[pkg] = DiscoveredApp(
                     packageName = pkg,
                     systemName = appInfo.loadLabel(packageManager).toString(),
-                    customName = renamedApps[pkg],
-                    isHidden = pkg in hiddenApps,
-                    activityName = "",
                 )
                 continue
             }
 
-            // Fallback: find first exported activity with an intent filter
             try {
                 val pkgInfo = packageManager.getPackageInfo(pkg, PM.GET_ACTIVITIES)
                 val activity = pkgInfo.activities?.firstOrNull { it.exported }
                 if (activity != null) {
-                    entriesByPackage[pkg] = AppEntry(
+                    byPackage[pkg] = DiscoveredApp(
                         packageName = pkg,
                         systemName = appInfo.loadLabel(packageManager).toString(),
-                        customName = renamedApps[pkg],
-                        isHidden = pkg in hiddenApps,
                         activityName = activity.name,
                     )
                 }
             } catch (_: Exception) { }
         }
 
-        val entries = entriesByPackage.values.filter { !it.isHidden }.sorted()
-        apps.clear()
-        apps.addAll(entries)
+        return byPackage.values.toList()
+    }
+
+    /**
+     * The cached discovery result, recomputed on IO only when [appListDirty].
+     * Backed by a Deferred so concurrent callers share one scan instead of racing.
+     *
+     * Returns an empty list if the scan failed; callers leave the UI untouched in
+     * that case rather than blanking it, and the cache is invalidated so the next
+     * resume retries instead of serving the failure forever.
+     */
+    private suspend fun discoveredApps(): List<DiscoveredApp> {
+        val job = discoveryJob?.takeIf { !appListDirty }
+            ?: lifecycleScope.async(Dispatchers.IO) { discoverInstalledApps() }
+                .also {
+                    discoveryJob = it
+                    appListDirty = false
+                }
+
+        return try {
+            job.await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            discoveryJob = null
+            appListDirty = true
+            emptyList()
+        }
+    }
+
+    // --- App list ---
+
+    /**
+     * Rebuilds the visible list from cached discovery. Cheap enough to call on
+     * every resume and after every hide/rename — the expensive scan only reruns
+     * when a package actually changed.
+     */
+    private fun refreshAppList() {
+        lifecycleScope.launch {
+            // An empty scan means failure, not an empty device — never seed the
+            // first-run whitelist or blank the list from it.
+            val discovered = discoveredApps().ifEmpty { return@launch }
+
+            // First run: hide everything outside the default whitelist. Seeded here
+            // rather than in onCreate so it reuses the same scan.
+            if (prefsManager.isFirstRun()) {
+                val allPackages = discovered.map { it.packageName }.toSet()
+                prefsManager.setHiddenApps((allPackages - DEFAULT_VISIBLE_PACKAGES) + packageName)
+                prefsManager.setFirstRunComplete()
+            }
+
+            val hiddenApps = prefsManager.getHiddenApps()
+            val renamedApps = prefsManager.getRenamedApps()
+
+            val entries = discovered
+                .filter { it.packageName !in hiddenApps }
+                .map { app ->
+                    AppEntry(
+                        packageName = app.packageName,
+                        systemName = app.systemName,
+                        customName = renamedApps[app.packageName],
+                        activityName = app.activityName,
+                    )
+                }
+                .sorted()
+
+            apps.clear()
+            apps.addAll(entries)
+        }
     }
 }
